@@ -1,7 +1,5 @@
 import threading
-
 from sqlalchemy import Column, String, UnicodeText, distinct, func
-
 from . import BASE, SESSION
 
 
@@ -25,7 +23,8 @@ class CatGloballist(BASE):
         )
 
 
-CatGloballist.__table__.create(checkfirst=True)
+# إصلاح: تمرير bind لإنشاء الجدول في قاعدة البيانات المرتبطة بالجلسة
+CatGloballist.__table__.create(bind=SESSION.bind, checkfirst=True)
 
 CATGLOBALLIST_INSERTION_LOCK = threading.RLock()
 
@@ -48,13 +47,9 @@ def add_to_list(keywoard, group_id):
 
 def rm_from_list(keywoard, group_id):
     with CATGLOBALLIST_INSERTION_LOCK:
-        if broadcast_group := SESSION.query(CatGloballist).get(
-            (keywoard, str(group_id))
-        ):
+        if broadcast_group := SESSION.query(CatGloballist).get((keywoard, str(group_id))):
             if str(group_id) in GLOBALLIST_SQL_.GLOBALLIST_VALUES.get(keywoard, set()):
-                GLOBALLIST_SQL_.GLOBALLIST_VALUES.get(keywoard, set()).remove(
-                    str(group_id)
-                )
+                GLOBALLIST_SQL_.GLOBALLIST_VALUES[keywoard].remove(str(group_id))
 
             SESSION.delete(broadcast_group)
             SESSION.commit()
@@ -71,12 +66,10 @@ def is_in_list(keywoard, group_id):
 
 def del_keyword_list(keywoard):
     with CATGLOBALLIST_INSERTION_LOCK:
-        broadcast_group = (
-            SESSION.query(CatGloballist.keywoard)
-            .filter(CatGloballist.keywoard == keywoard)
-            .delete()
-        )
-        GLOBALLIST_SQL_.GLOBALLIST_VALUES.pop(keywoard)
+        SESSION.query(CatGloballist.keywoard).filter(
+            CatGloballist.keywoard == keywoard
+        ).delete()
+        GLOBALLIST_SQL_.GLOBALLIST_VALUES.pop(keywoard, None)
         SESSION.commit()
 
 
@@ -101,11 +94,9 @@ def num_list():
 
 def num_list_keyword(keywoard):
     try:
-        return (
-            SESSION.query(CatGloballist.keywoard)
-            .filter(CatGloballist.keywoard == keywoard)
-            .count()
-        )
+        return SESSION.query(CatGloballist.keywoard).filter(
+            CatGloballist.keywoard == keywoard
+        ).count()
     finally:
         SESSION.close()
 
@@ -125,7 +116,7 @@ def __load_chat_lists():
 
         all_groups = SESSION.query(CatGloballist).all()
         for x in all_groups:
-            GLOBALLIST_SQL_.GLOBALLIST_VALUES[x.keywoard] += [x.group_id]
+            GLOBALLIST_SQL_.GLOBALLIST_VALUES[x.keywoard].append(x.group_id)
 
         GLOBALLIST_SQL_.GLOBALLIST_VALUES = {
             x: set(y) for x, y in GLOBALLIST_SQL_.GLOBALLIST_VALUES.items()
