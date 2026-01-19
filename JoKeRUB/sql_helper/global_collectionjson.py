@@ -1,6 +1,5 @@
 from sqlalchemy import Column, UnicodeText
 from sqlalchemy_json import MutableJson, NestedMutableJson
-
 from . import BASE, SESSION
 
 
@@ -16,7 +15,8 @@ class Cat_GlobalCollection_Json(BASE):
         self.njson = njson
 
 
-Cat_GlobalCollection_Json.__table__.create(checkfirst=True)
+# إصلاح: تمرير bind لإنشاء الجدول في قاعدة البيانات
+Cat_GlobalCollection_Json.__table__.create(bind=SESSION.bind, checkfirst=True)
 
 
 def get_collection(keywoard):
