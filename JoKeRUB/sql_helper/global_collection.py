@@ -1,7 +1,5 @@
 import threading
-
 from sqlalchemy import Column, PickleType, UnicodeText, distinct, func
-
 from . import BASE, SESSION
 
 
@@ -28,7 +26,8 @@ class Cat_GlobalCollection(BASE):
         )
 
 
-Cat_GlobalCollection.__table__.create(checkfirst=True)
+# ✅ إصلاح: تمرير bind لإنشاء الجدول
+Cat_GlobalCollection.__table__.create(bind=SESSION.bind, checkfirst=True)
 
 CAT_GLOBALCOLLECTION = threading.RLock()
 
@@ -44,7 +43,6 @@ COLLECTION_SQL_ = COLLECTION_SQL()
 def add_to_collectionlist(keywoard, contents):
     with CAT_GLOBALCOLLECTION:
         keyword_items = Cat_GlobalCollection(keywoard, tuple(contents))
-
         SESSION.merge(keyword_items)
         SESSION.commit()
         COLLECTION_SQL_.CONTENTS_LIST.setdefault(keywoard, set()).add(tuple(contents))
@@ -56,13 +54,10 @@ def rm_from_collectionlist(keywoard, contents):
             (keywoard, tuple(contents))
         ):
             if tuple(contents) in COLLECTION_SQL_.CONTENTS_LIST.get(keywoard, set()):
-                COLLECTION_SQL_.CONTENTS_LIST.get(keywoard, set()).remove(
-                    tuple(contents)
-                )
+                COLLECTION_SQL_.CONTENTS_LIST.get(keywoard, set()).remove(tuple(contents))
             SESSION.delete(keyword_items)
             SESSION.commit()
             return True
-
         SESSION.close()
         return False
 
@@ -75,12 +70,10 @@ def is_in_collectionlist(keywoard, contents):
 
 def del_keyword_collectionlist(keywoard):
     with CAT_GLOBALCOLLECTION:
-        keyword_items = (
-            SESSION.query(Cat_GlobalCollection.keywoard)
-            .filter(Cat_GlobalCollection.keywoard == keywoard)
-            .delete()
-        )
-        COLLECTION_SQL_.CONTENTS_LIST.pop(keywoard)
+        SESSION.query(Cat_GlobalCollection.keywoard).filter(
+            Cat_GlobalCollection.keywoard == keywoard
+        ).delete()
+        COLLECTION_SQL_.CONTENTS_LIST.pop(keywoard, None)
         SESSION.commit()
 
 
@@ -116,9 +109,7 @@ def num_collectionlist_item(keywoard):
 
 def num_collectionlist_items():
     try:
-        return SESSION.query(
-            func.count(distinct(Cat_GlobalCollection.keywoard))
-        ).scalar()
+        return SESSION.query(func.count(distinct(Cat_GlobalCollection.keywoard))).scalar()
     finally:
         SESSION.close()
 
@@ -133,9 +124,7 @@ def __load_item_collectionlists():
         for x in all_groups:
             COLLECTION_SQL_.CONTENTS_LIST[x.keywoard] += [x.contents]
 
-        COLLECTION_SQL_.CONTENTS_LIST = {
-            x: set(y) for x, y in COLLECTION_SQL_.CONTENTS_LIST.items()
-        }
+        COLLECTION_SQL_.CONTENTS_LIST = {x: set(y) for x, y in COLLECTION_SQL_.CONTENTS_LIST.items()}
 
     finally:
         SESSION.close()
